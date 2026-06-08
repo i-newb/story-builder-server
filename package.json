@@ -1,0 +1,11 @@
+{
+  "name": "story-builder-server",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.1.0",
+    "https-proxy-agent": "^9.0.0"
+  }
+}
