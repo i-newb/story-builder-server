@@ -2,16 +2,12 @@ const express = require("express");
 const https = require("https");
 const path = require("path");
 
-const { HttpsProxyAgent } = require("https-proxy-agent");
-
 require("dotenv").config({
   path: path.resolve(__dirname, ".env"),
 });
 
-
 const PORT = 3000;
 const API_KEY = process.env.API_KEY;
-const agent = new HttpsProxyAgent(`http://127.0.0.1:7897`); //代理服务器地址，确保与本地代理工具（如 Clash）地址一致，部署后需改为跳板机地址
 
 if (!API_KEY) {
   console.error("❌ 未设置 API_KEY 环境变量");
@@ -33,55 +29,25 @@ app.use((req, res, next) => {
 
 app.use(express.raw({ type: "application/json", limit: "10mb" }));
 
-app.post("/v1/anthropic/image-generate", (req, res) => {
-  const options = {
-    hostname: "api.anthropic.com",
-    path: "/v1/messages",
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": API_KEY,
-      "anthropic-version": "2023-06-01",
-    },
-  };
-
-  const proxyReq = https.request(options, (proxyRes) => {
-    res.status(proxyRes.statusCode);
-    res.setHeader("Content-Type", "application/json");
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    proxyRes.pipe(res);
-  });
-
-  proxyReq.on("error", (e) => {
-    console.error("代理请求失败:", e.message);
-    res.status(502).json({ error: { message: e.message } });
-  });
-
-  proxyReq.write(req.body);
-  proxyReq.end();
-});
-
-// OpenAI 图片生成接口代理（gpt-image-1）
-app.post("/v1/openai/image-generate", (req, res) => {
+// 智谱 AI 图片生成接口代理
+app.post("/v1/zhipu/image-generate", (req, res) => {
   let body;
   try {
     body = JSON.parse(req.body);
   } catch {
     return res.status(400).json({ error: { message: "请求体 JSON 解析失败" } });
   }
-  
-  // 确保请求体中包含 model 字段，默认使用 gpt-image-1
+
   if (!body.model) {
-    body.model = "gpt-image-1";
+    body.model = "glm-image";
   }
 
   const bodyStr = JSON.stringify(body);
 
   const options = {
-    hostname: "api.openai.com",
-    path: "/v1/images/generations",
+    hostname: "open.bigmodel.cn",
+    path: "/api/paas/v4/images/generations",
     method: "POST",
-    agent,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${API_KEY}`,
@@ -89,7 +55,7 @@ app.post("/v1/openai/image-generate", (req, res) => {
     },
   };
 
-  console.log("→ OpenAI 图片生成请求，model:", body.model);
+  console.log("→ 智谱 AI 图片生成请求，model:", body.model, "| prompt:", body.prompt?.slice(0, 60));
 
   const proxyReq = https.request(options, (proxyRes) => {
     res.status(proxyRes.statusCode);
@@ -99,7 +65,7 @@ app.post("/v1/openai/image-generate", (req, res) => {
   });
 
   proxyReq.on("error", (e) => {
-    console.error("OpenAI 代理请求失败:", e.message);
+    console.error("智谱 AI 代理请求失败:", e.message);
     res.status(502).json({ error: { message: e.message } });
   });
 
