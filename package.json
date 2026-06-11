@@ -1,12 +1,16 @@
 {
   "name": "story-builder-server",
+  "main": "index/index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index/index.js"
   },
   "dependencies": {
+    "body-parser": "^2.2.2",
+    "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.1.0",
-    "https-proxy-agent": "^9.0.0",
+    "http-errors": "^2.0.1",
+    "http-status-codes": "^2.3.0",
     "mongoose": "^8.9.5"
   }
 }
