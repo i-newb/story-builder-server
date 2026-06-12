@@ -10,13 +10,13 @@ const { Story, User } = require("../db/index.js");
 const router = express.Router();
 
 const API_KEY = process.env.API_KEY;
-const AUTH_SECRET = process.env.AUTH_SECRET || API_KEY;
+const AUTH_SECRET = "story-builder-auth-secret";
 const ZHIPU_HOST = "open.bigmodel.cn";
 const STORY_MODEL = "glm-5.1";
 const IMAGE_MODEL = "glm-image";
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
-const GENERATION_LIMIT = 5;
+const GENERATION_LIMIT = 2;
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -181,9 +181,13 @@ async function consumeGeneration(userId, kind) {
   return toUserDto(user).usage;
 }
 
-async function refundGeneration(userId, kind) {
+async function ensureGenerationAvailable(userId, kind) {
   const field = usageFieldForKind(kind);
-  await User.findByIdAndUpdate(userId, { $inc: { [field]: -1 } });
+  const user = await User.exists({ _id: userId, [field]: { $lt: GENERATION_LIMIT } });
+
+  if (!user) {
+    throw createError(StatusCodes.TOO_MANY_REQUESTS, `You can only generate ${GENERATION_LIMIT} ${kind === "story" ? "stories" : "illustrations"}`);
+  }
 }
 
 function toBase64DataUrl(buffer, mime = "image/png") {
@@ -266,14 +270,31 @@ async function convertIllustrationsToBase64(story) {
 
   for (const chapter of cloned.chapters || []) {
     for (const block of chapter.blocks || []) {
-      if (block.type === "illustration" && block.imageUrl && !block.svg) {
-        block.svg = await fetchImageAsBase64(block.imageUrl);
+      if (block.type === "illustration") {
+        const source = block.svg || block.imageUrl;
+        if (source && /^https?:\/\//i.test(source)) {
+          block.svg = await fetchImageAsBase64(source);
+        }
       }
       delete block.imageUrl;
     }
   }
 
   return removeImmutableStoryFields(cloned);
+}
+
+async function convertGeneratedImageUrlsToBase64(payload) {
+  const cloned = JSON.parse(JSON.stringify(payload || {}));
+
+  if (!Array.isArray(cloned.data)) return cloned;
+
+  for (const item of cloned.data) {
+    if (item?.url && /^https?:\/\//i.test(item.url)) {
+      item.url = await fetchImageAsBase64(item.url);
+    }
+  }
+
+  return cloned;
 }
 
 function formatPromptValue(value, fallback = "") {
@@ -310,7 +331,7 @@ function buildPrompt(payload) {
   类型：${formatPromptValue(payload.genre)}
   风格：${formatPromptValue(payload.tone)}
   章节数：${formatPromptValue(payload.chapterCount, 3)}
-  主要角色：${formatPromptValue(payload.characters, "请根据创意自行设计 2 个主要角色")}
+  主要角色：${formatPromptValue(payload.characters, "请根据创意自行设计角色")}
 
   要求：剧情完整，有冲突和转折；每章最少 8 个内容块；对话和旁白交替出现。characters 的颜色要浅一些，适合做气泡背景色。`;
 }
@@ -481,41 +502,34 @@ router.post("/auth/login", async (req, res) => {
   });
 });
 
-router.get("/auth/me", requireAuth, async (req, res) => {
+router.get("/auth/user", requireAuth, async (req, res) => {
   res.status(StatusCodes.OK).json({ user: toUserDto(req.user) });
 });
 
 router.post("/ai/image-generate", requireAuth, async (req, res) => {
   const body = getJsonBody(req);
-  let usage;
+  await ensureGenerationAvailable(req.user._id, "image");
 
-  try {
-    usage = await consumeGeneration(req.user._id, "image");
-    const result = await postJsonToZhipu("/api/paas/v4/images/generations", {
-      ...body,
-      model: body.model || IMAGE_MODEL,
-    });
+  const result = await postJsonToZhipu("/api/paas/v4/images/generations", {
+    ...body,
+    model: body.model || IMAGE_MODEL,
+  });
 
-    throwIfUpstreamFailed(result, "Image generation failed");
-    res.status(StatusCodes.OK).json({ ...result.body, usage });
-  } catch (error) {
-    if (usage) await refundGeneration(req.user._id, "image");
-    throw error;
-  }
+  throwIfUpstreamFailed(result, "Image generation failed");
+
+  const payload = await convertGeneratedImageUrlsToBase64(result.body);
+  const usage = await consumeGeneration(req.user._id, "image");
+  res.status(StatusCodes.OK).json({ ...payload, usage });
 });
 
 router.post("/ai/story-generate", requireAuth, async (req, res) => {
   const body = getJsonBody(req);
-  let usage;
+  await ensureGenerationAvailable(req.user._id, "story");
 
-  try {
-    usage = await consumeGeneration(req.user._id, "story");
-    const story = await generateStoryWithZhipu(body);
-    res.status(StatusCodes.OK).json({ story, usage });
-  } catch (error) {
-    if (usage) await refundGeneration(req.user._id, "story");
-    throw error;
-  }
+  const story = await generateStoryWithZhipu(body);
+  const usage = await consumeGeneration(req.user._id, "story");
+
+  res.status(StatusCodes.OK).json({ story, usage });
 });
 
 router.use(requireAuth);
