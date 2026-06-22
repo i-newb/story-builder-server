@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
-const storySchema = require("../schema/story.js");
-const userSchema = require("../schema/user.js");
+const storySchema = require("../models/story.js");
+const userSchema = require("../models/user.js");
 
 const MONGO_URI = "mongodb://localhost:27017/story-builder";
 

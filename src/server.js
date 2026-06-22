@@ -7,8 +7,8 @@ require("dotenv").config({
   path: path.resolve(__dirname, "..", ".env"),
 });
 
-const { connectDB } = require("../db/index.js");
-const { notFoundHandler, errorHandler } = require("../middleware/response.js");
+const { connectDB } = require("./config/db.js");
+const { notFoundHandler, errorHandler } = require("./middleware/response.js");
 
 const PORT = 3000;
 const API_KEY = process.env.API_KEY;
@@ -27,7 +27,7 @@ app.use(cors());
 app.use(bodyParser.json({ limit: "20mb", strict: true }));
 app.use(bodyParser.urlencoded({ extended: true, limit: "20mb" }));
 
-app.use("/v1", require("../route/index.js"));
+app.use("/v1", require("./route/index.js"));
 app.use(notFoundHandler);
 app.use(errorHandler);
 

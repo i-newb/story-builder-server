@@ -1,8 +1,8 @@
 {
   "name": "story-builder-server",
-  "main": "index/index.js",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node index/index.js"
+    "start": "node src/server.js"
   },
   "dependencies": {
     "body-parser": "^2.2.2",
