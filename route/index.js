@@ -16,7 +16,7 @@ const STORY_MODEL = "glm-5.1";
 const IMAGE_MODEL = "glm-image";
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
-const GENERATION_LIMIT = 2;
+const GENERATION_LIMIT = 5;
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
